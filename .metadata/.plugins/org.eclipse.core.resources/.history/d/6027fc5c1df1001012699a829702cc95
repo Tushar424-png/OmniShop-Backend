@@ -1,0 +1,12 @@
+package com.AuthService.Service;
+
+import com.AuthService.DTO.LoginDTO;
+
+public class JwtService {
+
+	public void generatetoken(LoginDTO request) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+}

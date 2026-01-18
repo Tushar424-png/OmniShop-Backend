@@ -1,0 +1,85 @@
+package com.api_gateway.config;
+
+import java.net.InetSocketAddress;
+import java.time.Duration;
+
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
+
+import reactor.core.publisher.Mono;
+
+@Component
+public class RateLimitFilter implements WebFilter {
+
+    private static final int MAX_REQUESTS = 10;          // limit
+    private static final Duration WINDOW = Duration.ofMinutes(5); // 5 min
+
+    private final ReactiveRedisTemplate<String, Integer> redisTemplate;
+
+    public RateLimitFilter(ReactiveRedisTemplate<String, Integer> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+
+        return resolveKey(exchange)
+                .flatMap(key -> applyRateLimit(key, exchange, chain));
+    }
+
+    private Mono<Void> applyRateLimit(String key,
+                                      ServerWebExchange exchange,
+                                      WebFilterChain chain) {
+
+        String redisKey = "rate_limit:" + key;
+
+        return redisTemplate.opsForValue()
+                .get(redisKey)
+                .defaultIfEmpty(0)
+                .flatMap(count -> {
+
+                    if (count >= MAX_REQUESTS) {
+                        exchange.getResponse()
+                                .setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
+
+                        byte[] msg = "Too many requests. Try again after 5 minutes."
+                                .getBytes();
+
+                        return exchange.getResponse().writeWith(
+                                Mono.just(exchange.getResponse()
+                                        .bufferFactory()
+                                        .wrap(msg))
+                        );
+                    }
+
+                    if (count == 0) {
+                        return redisTemplate.opsForValue()
+                                .set(redisKey, 1, WINDOW)
+                                .then(chain.filter(exchange));
+                    }
+
+                    return redisTemplate.opsForValue()
+                            .increment(redisKey)
+                            .then(chain.filter(exchange));
+                });
+    }
+
+    // 🔥 JWT email mile to email, warna IP
+    private Mono<String> resolveKey(ServerWebExchange exchange) {
+
+        return ReactiveSecurityContextHolder.getContext()
+                .map(ctx -> ctx.getAuthentication().getName()) // email
+                .switchIfEmpty(Mono.fromSupplier(() -> {
+                    InetSocketAddress address =
+                            exchange.getRequest().getRemoteAddress();
+                    return address != null
+                            ? address.getAddress().getHostAddress()
+                            : "unknown";
+                }));
+    }
+}

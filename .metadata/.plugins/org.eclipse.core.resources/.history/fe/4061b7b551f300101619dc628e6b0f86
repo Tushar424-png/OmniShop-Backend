@@ -1,0 +1,5 @@
+package com.Inventoryservice.Service;
+
+public class InventoryRedisService {
+
+}

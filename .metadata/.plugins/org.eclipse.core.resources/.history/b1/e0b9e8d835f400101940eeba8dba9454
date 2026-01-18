@@ -1,0 +1,54 @@
+package com.api_gateway.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.web.server.SecurityWebFilterChain; // Sahi import yahan hai
+
+@Configuration
+@EnableWebFluxSecurity
+public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    // Constructor Injection
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
+
+    @Bean
+    public SecurityWebFilterChain filterChain(ServerHttpSecurity http) {
+        return http
+            .csrf(csrf -> csrf.disable())
+            // Form login aur basic auth ko disable kiya kyunki hum JWT use kar rahe hain
+            .formLogin(form -> form.disable())
+            .httpBasic(basic -> basic.disable())
+            
+            // JWT filter ko Authentication ki jagah par add kiya
+            .addFilterAt(jwtAuthenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+            
+            .authorizeExchange(ex -> ex
+                // PUBLIC ROUTES
+                .pathMatchers("/auth/register", "/auth/login", "/products/getall").permitAll()
+
+                // ADMIN ROUTES
+                .pathMatchers(
+                    "/inventory/restock", "/order/getall", "/user/getall",
+                    "/cart/getall", "/wishlist/getall", "/products/add"
+                ).hasRole("ADMIN")
+
+                // USER ROUTES
+                .pathMatchers(
+                    "/order/create", "/order/check", "/user/getone",
+                    "/user/deletecartitem", "/cart/add", "/cart/remove",
+                    "/wishlist/add", "/wishlist/remove"
+                ).hasRole("USER")
+
+                // Baki sab ke liye login zaroori hai
+                .anyExchange().authenticated()
+            )
+            .build();
+    }
+}

@@ -1,0 +1,48 @@
+package com.AuthService.Service;
+
+import java.util.Date;
+
+import org.springframework.stereotype.Service;
+
+import com.AuthService.DTO.LoginDTO;
+
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+
+@Service
+public class JwtService {
+	private static final String SECRET_KEY = "Q9fT2Kx8M7nP6rE4bVZLwS3yJ0cA+H1UoWmDgI5qNks=";
+
+    // Token validity 1 hour
+	private static final long EXPIRATION_TIME = 10L * 24 * 60 * 60 * 1000; // 10 days
+
+
+	public String generateToken(String email, String role) {
+	    return Jwts.builder()
+	            .setSubject(email)
+	            .claim("role", role)   // 👈 ROLE ADDED
+	            .setIssuedAt(new Date())
+	            .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+	            .signWith(SignatureAlgorithm.HS256, SECRET_KEY)
+	            .compact();
+	}
+
+    // Optional: validate token
+    public boolean validateToken(String token) {
+        try {
+            Jwts.parser()
+                .setSigningKey(SECRET_KEY)
+                .parseClaimsJws(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    public String getEmailFromToken(String token) {
+        return Jwts.parser()
+                .setSigningKey(SECRET_KEY)
+                .parseClaimsJws(token)
+                .getBody()
+                .getSubject();
+    }
+}

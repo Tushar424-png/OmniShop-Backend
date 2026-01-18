@@ -1,0 +1,135 @@
+package com.productservices.Service;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+
+import com.productservices.Entity.Products;
+import com.productservices.Repository.ProductRepository;
+import com.productservices.dto.ProductRequest;
+import com.productservices.dto.ProductResponse;
+import com.productservices.dto.Requestdto;
+
+@Service
+public class ProductService {
+
+    private final ProductRepository productrepository;
+    private final UserClient userclient;
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    public ProductService(ProductRepository productrepository,
+                          UserClient userclient,
+                          RedisTemplate<String, Object> redisTemplate) {
+        this.productrepository = productrepository;
+        this.userclient = userclient;
+        this.redisTemplate = redisTemplate;
+    }
+
+    // ---------------- ADD PRODUCT ----------------
+    public ProductResponse add(ProductRequest productrequest) {
+
+        if (productrepository.existsByName(productrequest.getName())) {
+            throw new RuntimeException("Product with name already exists");
+        }
+
+        Products product = new Products();
+        product.setActive(productrequest.getActive());
+        product.setCategory(productrequest.getCategory());
+        product.setDescription(productrequest.getDescription());
+        product.setImageUrl(productrequest.getImageUrl());
+        product.setName(productrequest.getName());
+        product.setPrice(productrequest.getPrice());
+
+        Products savedProduct = productrepository.save(product);
+
+        // 🔥 Inventory service call
+        Requestdto request = new Requestdto();
+        request.setProductId(savedProduct.getId());
+        request.setActive(true);
+        request.setProductName(savedProduct.getName());
+        request.setQuantity(10);
+        userclient.createInventoryOnProductCreate(request);
+
+        // 🔥 Cache invalidate
+        redisTemplate.delete("products:all");
+
+        return mapToResponse(savedProduct);
+    }
+
+    // ---------------- GET ALL PRODUCTS (REDIS) ----------------
+    public List<ProductResponse> getAll() {
+
+        String key = "products:all";
+
+        List<ProductResponse> cachedProducts =
+                (List<ProductResponse>) redisTemplate.opsForValue().get(key);
+
+        if (cachedProducts != null) {
+            return cachedProducts; // 🔥 Redis HIT
+        }
+
+        List<ProductResponse> productResponses = productrepository.findAll()
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        redisTemplate.opsForValue()
+                .set(key, productResponses, 10, TimeUnit.MINUTES);
+
+        return productResponses;
+    }
+
+    // ---------------- GET ONE PRODUCT (REDIS) ----------------
+    public ProductResponse getOne(Long id) {
+
+        String key = "product:" + id;
+
+        ProductResponse cachedProduct =
+                (ProductResponse) redisTemplate.opsForValue().get(key);
+
+        if (cachedProduct != null) {
+            return cachedProduct; // 🔥 Redis HIT
+        }
+
+        Products product = productrepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        ProductResponse response = mapToResponse(product);
+
+        redisTemplate.opsForValue()
+                .set(key, response, 10, TimeUnit.MINUTES);
+
+        return response;
+    }
+
+    // ---------------- DEACTIVATE PRODUCT ----------------
+    public void deactivate(Long productId) {
+
+        Products product = productrepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        product.setActive(false);
+        productrepository.save(product);
+
+        // 🔥 Cache invalidate
+        redisTemplate.delete("product:" + productId);
+        redisTemplate.delete("products:all");
+    }
+
+    // ---------------- MAPPER ----------------
+    private ProductResponse mapToResponse(Products product) {
+        ProductResponse response = new ProductResponse();
+        response.setId(product.getId());
+        response.setName(product.getName());
+        response.setCategory(product.getCategory());
+        response.setDescription(product.getDescription());
+        response.setImageUrl(product.getImageUrl());
+        response.setPrice(product.getPrice());
+        response.setActive(product.getActive());
+        return response;
+    }
+}

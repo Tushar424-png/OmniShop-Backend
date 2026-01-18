@@ -1,0 +1,5 @@
+package com.productservices.config;
+
+public class RedisConfig {
+
+}

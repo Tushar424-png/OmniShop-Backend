@@ -1,0 +1,162 @@
+package com.Inventoryservice.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import com.Inventoryservice.Entity.Inventory;
+import com.Inventoryservice.Repository.InventoryRepository;
+import com.Inventoryservice.dto.InventoryCheckRequestDTO;
+import com.Inventoryservice.dto.InventoryCheckResponseDTO;
+import com.Inventoryservice.dto.InventoryCreateRequestDTO;
+import com.Inventoryservice.dto.InventoryReduceRequestDTO;
+import com.Inventoryservice.dto.InventoryResponseDTO;
+import com.Inventoryservice.dto.InventoryRestockRequestDTO;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.transaction.Transactional;
+@Service
+public class Inventoryservice {
+	 private final InventoryRepository inventoryRepo;
+	 private final ProductClient productClient;
+	 private final InventoryRedisService redisService;
+	 public Inventoryservice (InventoryRepository inventoryRepo,ProductClient productClient,InventoryRedisService redisService){
+		 this.inventoryRepo=inventoryRepo;
+		 this.productClient=productClient;
+		 this.redisService=redisService;
+	 }
+	public InventoryResponseDTO addNewProductInInventory(InventoryCreateRequestDTO request) {
+		Inventory inventory=new Inventory();
+		inventory.setProductId(request.getProductId());
+		inventory.setQuantity(request.getQuantity());
+		inventory.setProductName(request.getProductName());
+		inventory.updateStatus();
+		inventory.setActive(request.getActive());
+		Inventory response=inventoryRepo.save(inventory);
+		return mapToResponse(response);
+	}
+
+	private InventoryResponseDTO mapToResponse(Inventory inventory) {
+	    InventoryResponseDTO dto = new InventoryResponseDTO();
+	    dto.setId(inventory.getId());
+	    dto.setProductId(inventory.getProductId());
+	    dto.setProductName(inventory.getProductName());
+	    dto.setQuantity(inventory.getQuantity());
+	    dto.setStatus(inventory.getStatus());
+	    dto.setActive(inventory.getActive());
+	    return dto;
+	}
+	 @PostConstruct
+	    public void loadInventoryToRedis() {
+	        List<Inventory> inventories = inventoryRepo.findAll();
+
+	        for (Inventory inv : inventories) {
+	            redisService.setStock(
+	                inv.getProductId(),
+	                inv.getQuantity()
+	            );
+	        }
+
+	        System.out.println("✅ Inventory loaded into Redis");
+	    }
+
+	 @Transactional
+	 public List<InventoryResponseDTO> reduceInventoryBulk(
+	         List<InventoryReduceRequestDTO> requests) {
+
+	     List<InventoryResponseDTO> responses = new ArrayList<>();
+
+	     // 1️⃣ Redis atomic reduce
+	     for (InventoryReduceRequestDTO req : requests) {
+
+	         boolean success = redisService
+	                 .reduceStock(req.getProductId(), req.getQuantity());
+
+	         if (!success) {
+	             throw new RuntimeException(
+	                 "Insufficient stock for productId: " + req.getProductId());
+	         }
+	     }
+
+	     // 2️⃣ DB sync (safe now)
+	     for (InventoryReduceRequestDTO req : requests) {
+
+	         Inventory inventory = inventoryRepo
+	                 .findByProductId(req.getProductId())
+	                 .orElseThrow();
+
+	         inventory.setQuantity(
+	             inventory.getQuantity() - req.getQuantity());
+	         inventory.updateStatus();
+
+	         Inventory saved = inventoryRepo.save(inventory);
+	         responses.add(mapToResponse(saved));
+
+	         if (saved.getQuantity() == 0) {
+	             productClient.deactivateProduct(saved.getProductId());
+	             saved.setActive(false);
+	         }
+	     }
+
+	     return responses;
+	 }
+
+
+	 public InventoryResponseDTO restockInventory(
+		        InventoryRestockRequestDTO request) {
+
+		    Inventory inventory = inventoryRepo
+		        .findByProductId(request.getProductId())
+		        .orElseThrow();
+
+		    int newQty = inventory.getQuantity() + request.getQuantity();
+
+		    inventory.setQuantity(newQty);
+		    inventory.updateStatus();
+
+		    Inventory saved = inventoryRepo.save(inventory);
+
+		    // 🔥 Redis update
+		    redisService.setStock(
+		        inventory.getProductId(),
+		        newQty
+		    );
+
+		    return mapToResponse(saved);
+		}
+
+	public List<InventoryCheckResponseDTO> checkStock(
+	        List<InventoryCheckRequestDTO> requests) {
+
+	    List<InventoryCheckResponseDTO> responses = new ArrayList<>();
+
+	    for (InventoryCheckRequestDTO req : requests) {
+
+	        int available = redisService.getStock(req.getProductId());
+
+	        InventoryCheckResponseDTO res = new InventoryCheckResponseDTO();
+	        res.setProductId(req.getProductId());
+
+	        if (available <= 0) {
+	            res.setAvailable(false);
+	            res.setMessage("Out of stock");
+	        }
+	        else if (available < req.getRequiredQuantity()) {
+	            res.setAvailable(false);
+	            res.setAvailableQuantity(available);
+	            res.setMessage("Insufficient stock");
+	        }
+	        else {
+	            res.setAvailable(true);
+	            res.setAvailableQuantity(available);
+	            res.setMessage("Stock available");
+	        }
+
+	        responses.add(res);
+	    }
+	    return responses;
+	}
+
+
+
+}

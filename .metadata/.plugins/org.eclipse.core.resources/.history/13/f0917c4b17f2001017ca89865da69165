@@ -1,0 +1,41 @@
+@Component
+public class JwtService {
+
+    private static final String SECRET =
+        "Q9fT2Kx8M7nP6rE4bVZLwS3yJ0cA+H1UoWmDgI5qNks=";
+
+    private SecretKey getSigningKey() {
+        byte[] keyBytes = Base64.getDecoder().decode(SECRET);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    public boolean validateToken(String token) {
+        try {
+            Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public String extractEmail(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .getSubject();
+    }
+
+    public String getRoleFromToken(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .get("role", String.class);
+    }
+}

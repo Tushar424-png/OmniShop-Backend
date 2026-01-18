@@ -1,0 +1,42 @@
+package com.orderservice.service;
+
+
+import com.orderservice.dto.*;
+
+
+import org.springframework.stereotype.Service;
+import java.util.Collections;
+import java.util.List;
+
+@Service
+public class FallbackService {
+
+    public UserResponse getUserByIdFallback(Long userId, Throwable t) {
+        System.err.println("User Service is down: " + t.getMessage());
+        return new UserResponse(); // Return empty object or default
+    }
+
+    public ProductResponse getProductByIdFallback(Long productId, Throwable t) {
+        System.err.println("Product Service is down: " + t.getMessage());
+        ProductResponse response = new ProductResponse();
+        response.setName("Product info currently unavailable");
+        return response;
+    }
+
+    public List<InventoryCheckResponseDTO> checkStockFallback(List<InventoryCheckRequestDTO> request, Throwable t) {
+        System.err.println("Inventory Service is down: " + t.getMessage());
+        return Collections.emptyList(); // Return empty list to prevent order processing
+    }
+    public void deleteCartItemFallback(Long userId, Throwable t) {
+    	System.err.println("FAILED: User service down. Could not delete cart for user: {}. Error: {}"+ 
+                  userId+t.getMessage());
+        // Option: Save userId in Redis to retry later
+    }
+
+    // Fallback for reduceStock
+    public void reduceStockFallback(List<InventoryReduceRequestDTO> request, Throwable t) {
+    	System.err.println("CRITICAL: Inventory service down. Stock reduction failed! Request: {}. Error: {}"+ 
+                  request+ t.getMessage());
+        
+            }
+}

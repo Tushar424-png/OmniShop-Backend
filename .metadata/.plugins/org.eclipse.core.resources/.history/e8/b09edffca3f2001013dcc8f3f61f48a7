@@ -1,0 +1,53 @@
+package com.userservice.Service;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+import com.userservice.Entity.CartItem;
+import com.userservice.Entity.Users;
+import com.userservice.Repository.CartRepository;
+import com.userservice.Repository.UserRepository;
+import com.userservice.dto.CartRequest;
+import com.userservice.dto.CartResponse;
+
+@Service
+public class CartService {
+	   private final UserRepository userRepository;
+	   private final CartRepository cartRepository;
+	   public CartService(UserRepository userRepository,CartRepository cartRepository) {
+		   this.userRepository=userRepository;
+		   this.cartRepository=cartRepository;
+	   }
+	public List<CartResponse> getall() {
+		List<CartItem>CartItem=cartRepository.findAll();
+		return CartItem.stream()
+                .map(Item -> mapToCartResponse(Item)) 
+                .toList();
+	}
+
+	public CartResponse addToCart(CartRequest cartRequest) {
+		Users user = userRepository.findById(cartRequest.getUserId())
+		        .orElseThrow(() -> new RuntimeException("User not found"));
+		    
+		    CartItem item = new CartItem();
+		    item.setProductId(cartRequest.getProductId());
+		    item.setQuantity(cartRequest.getQuantity());
+		    item.setUser(user); 
+		     CartItem res=cartRepository.save(item);
+		     return mapToCartResponse(res);
+	}
+	private CartResponse mapToCartResponse(CartItem res) {
+
+        CartResponse response = new CartResponse();
+        response.setId(res.getId());
+        response.setProductId(res.getProductId());
+        response.setUserId(res.getUser().getId());
+        response.setQuantity(res.getQuantity());
+        return response;
+    }
+	public void removeCartItem(Long cartItemId) {
+		// TODO Auto-generated method stub
+		
+	}
+}

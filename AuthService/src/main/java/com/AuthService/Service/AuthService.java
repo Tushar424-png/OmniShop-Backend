@@ -1,0 +1,49 @@
+package com.AuthService.Service;
+
+import java.util.Optional;
+
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import com.AuthService.DTO.AuthDTO;
+import com.AuthService.DTO.UserResponse;
+import com.AuthService.Entity.UserAuth;
+import com.AuthService.Repository.AuthRepository;
+@Service
+public class AuthService {
+	private final BCryptPasswordEncoder passwordEncoder;
+	private final AuthRepository repository;
+    private final UserClient client;
+    public AuthService(BCryptPasswordEncoder passwordEncoder,AuthRepository repository,UserClient client) {
+        this.passwordEncoder = passwordEncoder;
+        this.repository=repository;
+        this.client=client;
+    }
+	public void add(AuthDTO request) {
+		UserResponse user=new UserResponse();
+        user.setFullName(request.getFullName());
+        user.setAddress(request.getAddress());
+        user.setEmail(request.getEmail());
+        client.AddUser(user);
+        UserAuth auth=new UserAuth();
+		auth.setEmail(request.getEmail());
+		String encodedPassword = passwordEncoder.encode(request.getPassword());
+        auth.setPassword(encodedPassword);
+        repository.save(auth);
+	}
+	public boolean validateUser(String email, String password) {
+	    Optional<UserAuth> userOpt = repository.findByEmail(email);
+	    if (userOpt.isEmpty()) return false;
+
+	    UserAuth user = userOpt.get();
+	    
+	    // ✅ Use BCrypt matches
+	    return passwordEncoder.matches(password, user.getPassword());
+	}
+	public String getRoleByEmail(String email) {
+	    return repository.findByEmail(email)
+	            .map(UserAuth::getRole)
+	            .orElseThrow(() -> new RuntimeException("Role not found"));
+	}
+
+}

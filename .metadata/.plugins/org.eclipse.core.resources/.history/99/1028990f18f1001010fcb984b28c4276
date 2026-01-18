@@ -1,0 +1,5 @@
+package com.AuthService.Service;
+
+public class JwtService {
+
+}

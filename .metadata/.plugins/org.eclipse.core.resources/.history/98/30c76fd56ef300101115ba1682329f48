@@ -1,0 +1,145 @@
+package com.userservice.Service;
+
+package com.userservice.Service;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+
+import com.userservice.Entity.Users;
+import com.userservice.Repository.UserRepository;
+import com.userservice.dto.*;
+
+import jakarta.transaction.Transactional;
+
+@Service
+public class UserService {
+
+    private final UserRepository userRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    public UserService(UserRepository userRepository,
+                       RedisTemplate<String, Object> redisTemplate) {
+        this.userRepository = userRepository;
+        this.redisTemplate = redisTemplate;
+    }
+
+    // ---------------- SAVE USER ----------------
+    public UserResponse save(UserRequest userRequest) {
+
+        if (userRepository.existsByEmail(userRequest.getEmail())) {
+            throw new RuntimeException("Email already exists!");
+        }
+
+        Users user = new Users();
+        user.setFullName(userRequest.getFullName());
+        user.setEmail(userRequest.getEmail());
+        user.setAddress(userRequest.getAddress());
+
+        Users savedUser = userRepository.save(user);
+
+        // 🔥 invalidate admin cache
+        redisTemplate.delete("user:all");
+
+        return mapToUserResponse(savedUser);
+    }
+
+    // ---------------- GET ALL USERS ----------------
+    public List<UserResponse> getAll() {
+
+        String key = "user:all";
+
+        List<UserResponse> cached =
+                (List<UserResponse>) redisTemplate.opsForValue().get(key);
+
+        if (cached != null) {
+            return cached;
+        }
+
+        List<UserResponse> response = userRepository.findAll()
+                .stream()
+                .map(this::mapToUserResponse)
+                .collect(Collectors.toList());
+
+        redisTemplate.opsForValue()
+                .set(key, response, 10, TimeUnit.MINUTES);
+
+        return response;
+    }
+
+    // ---------------- GET ONE USER (REDIS) ----------------
+    public UserResponse getOne(Long id) {
+
+        String key = "user:profile:" + id;
+
+        UserResponse cached =
+                (UserResponse) redisTemplate.opsForValue().get(key);
+
+        if (cached != null) {
+            return cached; // 🔥 Redis HIT
+        }
+
+        Users user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found with id " + id));
+
+        UserResponse response = mapToUserResponse(user);
+
+        redisTemplate.opsForValue()
+                .set(key, response, 10, TimeUnit.MINUTES);
+
+        return response;
+    }
+
+    // ---------------- CLEAR CART ----------------
+    @Transactional
+    public void clearUserCart(Long userId) {
+
+        Users user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.getCartItems().clear();
+
+        // 🔥 invalidate user cache
+        redisTemplate.delete("user:profile:" + userId);
+    }
+
+    // ---------------- MAPPER ----------------
+    private UserResponse mapToUserResponse(Users user) {
+
+        UserResponse response = new UserResponse();
+        response.setId(user.getId());
+        response.setFullName(user.getFullName());
+        response.setEmail(user.getEmail());
+        response.setRole(user.getRole());
+        response.setAddress(user.getAddress());
+
+        if (user.getCartItems() != null) {
+            List<CartResponse> cartDtos = user.getCartItems().stream().map(item -> {
+                CartResponse dto = new CartResponse();
+                dto.setId(item.getId());
+                dto.setProductId(item.getProductId());
+                dto.setQuantity(item.getQuantity());
+                dto.setUserId(user.getId());
+                return dto;
+            }).collect(Collectors.toList());
+            response.setCartItems(cartDtos);
+        }
+
+        if (user.getWishlistItems() != null) {
+            List<WishlistResponse> wishlistDtos = user.getWishlistItems().stream().map(item -> {
+                WishlistResponse dto = new WishlistResponse();
+                dto.setId(item.getId());
+                dto.setProductId(item.getProductId());
+                dto.setUserId(user.getId());
+                return dto;
+            }).collect(Collectors.toList());
+            response.setWishlistItems(wishlistDtos);
+        }
+
+        return response;
+    }
+}

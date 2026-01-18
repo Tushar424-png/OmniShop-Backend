@@ -1,0 +1,56 @@
+package com.userservice.Service;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+import com.userservice.Entity.Users;
+import com.userservice.Entity.WishlistItem;
+import com.userservice.Repository.UserRepository;
+import com.userservice.Repository.wishlistRepository;
+import com.userservice.dto.WishlistRequest;
+import com.userservice.dto.WishlistResponse;
+@Service
+public class WishlistService {
+   private final UserRepository userRepository;
+   private final wishlistRepository wishlistRepository;
+   public WishlistService(UserRepository userRepository,wishlistRepository wishlistRepository) {
+	   this.userRepository=userRepository;
+	   this.wishlistRepository=wishlistRepository;
+   }
+	public WishlistResponse addToWishlist(WishlistRequest wishlistRequest) {
+		Users user = userRepository.findById(wishlistRequest.getUserId())
+		        .orElseThrow(() -> new RuntimeException("User not found"));
+		    
+		    WishlistItem item = new WishlistItem();
+		    item.setProductId(wishlistRequest.getProductId());
+		 
+		    item.setUser(user); 
+		     WishlistItem res=wishlistRepository.save(item);
+		     return mapToWishlistResponse(res);
+		     
+		
+	}
+	private WishlistResponse mapToWishlistResponse(WishlistItem res) {
+
+        WishlistResponse response = new WishlistResponse();
+        response.setId(res.getId());
+        response.setProductId(res.getProductId());
+        response.setUserId(res.getUser().getId());
+        return response;
+    }
+
+	public List<WishlistResponse> getall() {
+		List<WishlistItem>wishlistItem=wishlistRepository.findAll();
+		return wishlistItem.stream()
+                .map(Item -> mapToWishlistResponse(Item)) 
+                .toList();
+	}
+	public void removeCartItem(Long wishlistId) {
+		wishlistRepository.deleteById(wishlistId);
+		
+	}
+
+	
+
+}

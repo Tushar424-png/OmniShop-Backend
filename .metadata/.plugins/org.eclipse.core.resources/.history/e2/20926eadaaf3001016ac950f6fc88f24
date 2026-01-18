@@ -1,0 +1,19 @@
+spring.application.name=AuthService
+server.port=8087
+spring.datasource.url=jdbc:mysql://localhost:3306/authservice?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+spring.datasource.username=root
+spring.datasource.password=9646147245
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+eureka.client.service-url.defaultZone=http://localhost:8761/eureka/
+eureka.client.register-with-eureka=true
+eureka.client.fetch-registry=true
+resilience4j.circuitbreaker.instances.userService.failure-rate-threshold=50
+
+# Wait duration: Circuit band hone ke baad 10 seconds tak wait karein (taki server theek ho jaye)
+resilience4j.circuitbreaker.instances.userService.wait-duration-in-open-state=10s
+
+# Sliding window: pichli 5 requests ko check karein decision lene ke liye
+resilience4j.circuitbreaker.instances.userService.sliding-window-size=5

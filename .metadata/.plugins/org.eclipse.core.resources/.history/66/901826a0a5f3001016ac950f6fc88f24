@@ -1,0 +1,28 @@
+package com.orderservice.service;
+
+
+import com.orderservice.dto.*;
+import org.springframework.stereotype.Service;
+import java.util.Collections;
+import java.util.List;
+
+@Service
+public class FallbackService {
+
+    public UserResponse getUserByIdFallback(Long userId, Throwable t) {
+        System.err.println("User Service is down: " + t.getMessage());
+        return new UserResponse(); // Return empty object or default
+    }
+
+    public ProductResponse getProductByIdFallback(Long productId, Throwable t) {
+        System.err.println("Product Service is down: " + t.getMessage());
+        ProductResponse response = new ProductResponse();
+        response.setName("Product info currently unavailable");
+        return response;
+    }
+
+    public List<InventoryCheckResponseDTO> checkStockFallback(List<InventoryCheckRequestDTO> request, Throwable t) {
+        System.err.println("Inventory Service is down: " + t.getMessage());
+        return Collections.emptyList(); // Return empty list to prevent order processing
+    }
+}

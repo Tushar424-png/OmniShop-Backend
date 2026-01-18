@@ -1,0 +1,57 @@
+package com.api_gateway.config;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
+import org.springframework.http.HttpHeaders;
+import reactor.core.publisher.Mono;
+
+@Component
+public class JwtAuthenticationFilter implements WebFilter {
+
+    private final JwtService jwtService;
+
+    public JwtAuthenticationFilter(JwtService jwtService) {
+        this.jwtService = jwtService;
+    }
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+
+        String path = exchange.getRequest().getPath().value();
+        System.out.println("[JWT FILTER] Path: " + path); // ✅ dekho kaunsa endpoint hit ho raha hai
+
+        // Skip auth endpoints
+        if (path.startsWith("/auth")) {
+            System.out.println("[JWT FILTER] Skipping auth path");
+            return chain.filter(exchange);
+        }
+
+        String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        System.out.println("[JWT FILTER] Authorization header: " + authHeader); // ✅ dekho kya header aa raha hai
+
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+
+            String token = authHeader.substring(7);
+            System.out.println("[JWT FILTER] Token extracted: " + token); // ✅ dekho token string
+
+            boolean valid = jwtService.validateToken(token);
+            System.out.println("[JWT FILTER] Token valid? " + valid); // ✅ check if token valid hai
+
+            if (valid) {
+                System.out.println("[JWT FILTER] Token valid, allowing request");
+                return chain.filter(exchange); // allow
+            } else {
+                System.out.println("[JWT FILTER] Token invalid or expired!");
+            }
+        } else {
+            System.out.println("[JWT FILTER] No Authorization header or wrong format");
+        }
+
+        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+        return exchange.getResponse().setComplete();
+    }
+
+}

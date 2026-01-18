@@ -1,0 +1,52 @@
+package com.AuthService.Controller;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.AuthService.DTO.AuthDTO;
+import com.AuthService.DTO.LoginDTO;
+import com.AuthService.Service.AuthService;
+import com.AuthService.Service.JwtService;
+
+@RestController
+@RequestMapping("/auth")
+public class AuthController {
+    private final AuthService service;
+    private final JwtService jwtservice;
+	AuthController(AuthService service,JwtService jwtservice){
+		this.service=service;
+		this.jwtservice=jwtservice;
+	}
+	@ResponseStatus(HttpStatus.CREATED)
+	@PostMapping("/register")
+	public String Register(@RequestBody AuthDTO request) {
+		service.add(request);
+		return "User Register Successfully";
+	}
+	@PostMapping("/login")
+	public String login(@RequestBody LoginDTO request) {
+
+	    boolean isValid = service.validateUser(
+	            request.getEmail(), 
+	            request.getPassword()
+	    );
+
+	    if (!isValid) {
+	        throw new RuntimeException("Invalid email or password");
+	    }
+
+	    String role = service.getRoleByEmail(request.getEmail());
+
+	    return jwtservice.generateToken(
+	            request.getEmail(),
+	            role
+	    );
+	}
+
+
+	
+}

@@ -1,0 +1,31 @@
+package com.api_gateway.config;
+
+import org.springframework.stereotype.Component;
+
+import io.jsonwebtoken.Jwts;
+
+@Component
+public class JwtService {
+
+	private static final String SECRET_KEY = "MySuperSecureJwtSecretKeyThatIs32Char!";
+
+
+    public boolean validateToken(String token) {
+        try {
+            Jwts.parser()
+                .setSigningKey(SECRET_KEY)
+                .parseClaimsJws(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public String extractEmail(String token) {
+        return Jwts.parser()
+                .setSigningKey(SECRET_KEY)
+                .parseClaimsJws(token)
+                .getBody()
+                .getSubject();
+    }
+}
